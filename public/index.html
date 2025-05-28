@@ -1,0 +1,255 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>OAuth Client Management</title>
+  <style>
+    body {
+      font-family: sans-serif;
+      margin: 20px;
+      background-color: #f4f7f6;
+      color: #333;
+    }
+
+    h1,
+    h2 {
+      margin-bottom: 15px;
+      color: #2c3e50;
+    }
+
+    form {
+      background-color: #ffffff;
+      padding: 20px;
+      border-radius: 8px;
+      box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+      margin-bottom: 25px;
+    }
+
+    .form-group {
+      margin-bottom: 15px;
+    }
+
+    label {
+      display: block;
+      margin-bottom: 8px;
+      font-weight: bold;
+      color: #555;
+    }
+
+    input[type="text"],
+    textarea {
+      width: calc(100% - 20px);
+      /* Adjust for padding */
+      padding: 10px;
+      margin-bottom: 5px;
+      border: 1px solid #ced4da;
+      border-radius: 4px;
+      box-sizing: border-box;
+      font-size: 1rem;
+    }
+
+    input[type="text"]:focus,
+    textarea:focus {
+      border-color: #007bff;
+      box-shadow: 0 0 0 0.2rem rgba(0, 123, 255, .25);
+      outline: none;
+    }
+
+    button {
+      padding: 10px 20px;
+      background-color: #007bff;
+      color: white;
+      border: none;
+      border-radius: 5px;
+      cursor: pointer;
+      font-size: 1rem;
+      transition: background-color 0.2s ease;
+      margin-right: 10px;
+    }
+
+    button:hover {
+      background-color: #0056b3;
+    }
+
+    button#cancel-edit {
+      background-color: #6c757d;
+    }
+
+    button#cancel-edit:hover {
+      background-color: #5a6268;
+    }
+
+    #client-list {
+      margin-top: 20px;
+      border-collapse: collapse;
+      width: 100%;
+      background-color: #ffffff;
+      border-radius: 8px;
+      overflow: hidden;
+      /* Ensures rounded corners apply to table */
+      box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+    }
+
+    #client-list th,
+    #client-list td {
+      border: 1px solid #dee2e6;
+      padding: 12px 15px;
+      text-align: left;
+    }
+
+    #client-list th {
+      background-color: #e9ecef;
+      font-weight: bold;
+      color: #495057;
+      text-transform: uppercase;
+      font-size: 0.9rem;
+    }
+
+    #client-list tbody tr:nth-child(even) {
+      background-color: #f8f9fa;
+    }
+
+    #client-list tbody tr:hover {
+      background-color: #e2e6ea;
+    }
+
+    .error {
+      color: #dc3545;
+      margin-top: 5px;
+      font-size: 0.875rem;
+    }
+
+    #edit-client-form {
+      margin-top: 30px;
+      border-top: 2px solid #007bff;
+      padding-top: 20px;
+    }
+
+    #generated-credentials {
+      background-color: #eaf7ed;
+      border: 1px solid #d4edda;
+      color: #155724;
+      padding: 15px;
+      border-radius: 5px;
+      margin-top: 20px;
+      display: none;
+      /* Hidden by default */
+    }
+
+    #generated-credentials p {
+      margin: 5px 0;
+      word-break: break-all;
+      /* Ensures long strings wrap */
+    }
+
+    #generated-credentials strong {
+      color: #218838;
+    }
+
+    .copy-button {
+      background-color: #28a745;
+      margin-left: 10px;
+      padding: 5px 10px;
+      font-size: 0.8rem;
+    }
+
+    .copy-button:hover {
+      background-color: #218838;
+    }
+
+    .grants-checkbox-group {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px;
+      margin-top: 5px;
+    }
+
+    .grants-checkbox-group label {
+      display: flex;
+      align-items: center;
+      font-weight: normal;
+      margin-bottom: 0;
+    }
+
+    .grants-checkbox-group input[type="checkbox"] {
+      width: auto;
+      margin-right: 5px;
+      margin-bottom: 0;
+    }
+  </style>
+</head>
+
+<body>
+  <h1>OAuth Client Management</h1>
+
+  <h2>Add New Client</h2>
+  <form id="add-client-form">
+    <div class="form-group">
+      <label for="client-name">Client Name:</label>
+      <input type="text" id="client-name" required>
+    </div>
+    <div class="form-group">
+      <label>Grants:</label>
+      <div id="add-client-grants-checkboxes" class="grants-checkbox-group">
+      </div>
+    </div>
+    <div class="form-group">
+      <label for="client-redirect-uris">Redirect URIs (one per line):</label>
+      <textarea id="client-redirect-uris">http://localhost:8080/callback</textarea>
+    </div>
+    <button type="submit">Add Client</button>
+    <div id="add-client-error" class="error"></div>
+  </form>
+
+  <div id="generated-credentials">
+    <h3>Client Created Successfully!</h3>
+    <p>Please save these credentials, they will not be shown again:</p>
+    <p>Client ID: <strong id="display-client-id"></strong> <button class="copy-button"
+        data-target="display-client-id">Copy</button></p>
+    <p>Client Secret: <strong id="display-client-secret"></strong> <button class="copy-button"
+        data-target="display-client-secret">Copy</button></p>
+  </div>
+
+  <h2>Client List</h2>
+  <table id="client-list">
+    <thead>
+      <tr>
+        <th>ID</th>
+        <th>Name</th>
+        <th>Secret</th>
+        <th>Grants</th>
+        <th>Redirect URIs</th>
+        <th>Actions</th>
+      </tr>
+    </thead>
+    <tbody id="clients-table-body">
+    </tbody>
+  </table>
+
+  <h2>Edit Client</h2>
+  <form id="edit-client-form" style="display: none;">
+    <input type="hidden" id="edit-client-id">
+    <div class="form-group">
+      <label for="edit-client-name">Client Name:</label>
+      <input type="text" id="edit-client-name">
+    </div>
+    <div class="form-group">
+      <label>Grants:</label>
+      <div id="edit-client-grants-checkboxes" class="grants-checkbox-group">
+      </div>
+    </div>
+    <div class="form-group">
+      <label for="edit-client-redirect-uris">Redirect URIs (one per line):</label>
+      <textarea id="edit-client-redirect-uris"></textarea>
+    </div>
+    <button type="submit">Update Client</button>
+    <button type="button" id="cancel-edit">Cancel</button>
+    <div id="edit-client-error" class="error"></div>
+  </form>
+
+  <script src="/static/script.js"></script>
+</body>
+
+</html>
