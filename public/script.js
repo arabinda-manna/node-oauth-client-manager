@@ -1,3 +1,9 @@
+// my-oauth-server-package/public/script.js
+
+// Use the dynamically provided base URL from window.OAUTH_BASE_URL
+// This variable is set by the server-side rendering of index.html
+const OAUTH_API_BASE = window.OAUTH_BASE_URL; // Default fallback, but it should be set
+
 const clientsTableBody = document.getElementById('clients-table-body');
 const addClientForm = document.getElementById('add-client-form');
 const addClientError = document.getElementById('add-client-error');
@@ -44,13 +50,23 @@ const createGrantCheckboxes = (containerElement, formPrefix, selectedGrants = []
 // Initialize checkboxes for add form on load
 document.addEventListener('DOMContentLoaded', () => {
   createGrantCheckboxes(addClientGrantsCheckboxesDiv, 'add-client-grants', availableGrants); // Default all selected for new clients
+  // Fetch clients once the OAUTH_API_BASE is guaranteed to be set (from index.html)
+  fetchClients();
 });
+
+
+// Helper to construct API URLs
+const getApiUrl = (relativePath) => {
+  // OAUTH_API_BASE will be like '/auth' (or whatever the parent mounts it at)
+  // relativePath will be like '/clients' or '/clients/some-id/regenerate-secret'
+  return `${OAUTH_API_BASE}${relativePath}`;
+};
 
 
 // Function to fetch and render the list of clients
 const fetchClients = async () => {
   try {
-    const response = await fetch('/api/clients');
+    const response = await fetch(getApiUrl('/clients')); // Use helper function
     if (!response.ok) {
       throw new Error(`HTTP error! status: ${response.status}`);
     }
@@ -116,7 +132,7 @@ addClientForm.addEventListener('submit', async (e) => {
   }
 
   try {
-    const response = await fetch('/api/clients', {
+    const response = await fetch(getApiUrl('/clients'), { // Use helper function
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -135,6 +151,8 @@ addClientForm.addEventListener('submit', async (e) => {
     // Display generated credentials
     displayClientId.textContent = newClient.id;
     displayClientSecret.textContent = newClient.secret; // This is the plain text secret
+    generatedCredentialsDiv.querySelector('h3').textContent = 'Client Created Successfully!'; // Reset title
+    generatedCredentialsDiv.querySelector('p:first-of-type').textContent = 'Please save these credentials, they will not be shown again:'; // Reset text
     generatedCredentialsDiv.style.display = 'block';
 
     addClientForm.reset(); // Clear the form
@@ -168,7 +186,7 @@ editClientForm.addEventListener('submit', async (e) => {
   // Get selected grants from checkboxes for edit form
   const grants = Array.from(editClientGrantsCheckboxesDiv.querySelectorAll('input[type="checkbox"]:checked'))
     .map(checkbox => checkbox.value);
-  const redirectUris = editClientRedirectUrisInput.value.split('\n').map(uri => uri.trim()).filter(uri => uri !== '');
+  const redirectUris = document.getElementById('edit-client-redirect-uris').value.split('\n').map(uri => uri.trim()).filter(uri => uri !== '');
 
   if (!clientName || grants.length === 0 || redirectUris.length === 0) {
     editClientError.textContent = 'Client Name, at least one Grant, and Redirect URIs are required for update.';
@@ -176,7 +194,7 @@ editClientForm.addEventListener('submit', async (e) => {
   }
 
   try {
-    const response = await fetch(`/api/clients/${clientId}`, {
+    const response = await fetch(getApiUrl(`/clients/${clientId}`), { // Use helper function
       method: 'PUT',
       headers: {
         'Content-Type': 'application/json',
@@ -202,7 +220,7 @@ editClientForm.addEventListener('submit', async (e) => {
 const regenerateClientSecret = async (clientId) => {
   if (window.confirm(`Are you sure you want to regenerate the secret for client ID "${clientId}"? The old secret will be lost and cannot be recovered.`)) {
     try {
-      const response = await fetch(`/api/clients/${clientId}/regenerate-secret`, {
+      const response = await fetch(getApiUrl(`/clients/${clientId}/regenerate-secret`), { // Use helper function
         method: 'POST',
       });
 
@@ -232,7 +250,7 @@ const regenerateClientSecret = async (clientId) => {
 const deleteClient = async (clientId) => {
   if (window.confirm(`Are you sure you want to delete client "${clientId}"? This action cannot be undone.`)) {
     try {
-      const response = await fetch(`/api/clients/${clientId}`, {
+      const response = await fetch(getApiUrl(`/clients/${clientId}`), { // Use helper function
         method: 'DELETE',
       });
 
@@ -283,7 +301,3 @@ document.querySelectorAll('.copy-button').forEach(button => {
     }
   });
 });
-
-
-// Initial load of clients when the page loads
-document.addEventListener('DOMContentLoaded', fetchClients);

@@ -1,82 +1,94 @@
-// Load environment variables from .env file at the very beginning
+// Main Project's server.js
 require('dotenv').config();
 
 const express = require('express');
 const bodyParser = require('body-parser');
 const cors = require('cors');
-const OAuthServer = require('@node-oauth/express-oauth-server');
 const path = require('path');
 
-// Import database connection and models
-const db = require('./models');
+// Import the function from your OAuth server NPM package
+const createOauthPackage = require('./index');
 
-// Import routes
-const clientRoutes = require('./routes/clientRoutes');
-const oauthRoutes = require('./routes/oauthRoutes');
+// --- Define your custom getUser and getUserFromClient logic ---
+// These functions will interact with YOUR main application's user database/logic.
+const myCustomGetUser = async (username, password) => {
+  console.log(`Main App: Custom getUser called for: ${username}`);
+  // Example: Replace with actual user database lookup and password verification (e.g., bcrypt)
+  return null;
+};
+
+const myCustomGetUserFromClient = async (client) => {
+  console.log(`Main App: Custom getUserFromClient called for client: ${client.clientId}`);
+  // Example: If certain clients are associated with a specific service user
+  if (client.clientName) {
+    return { id: client.clientName.toLowerCase().replace(" ", "-"), name: client.clientName };
+  }
+  return null;
+};
+// --- End custom user logic ---
+
+
+// Initialize the OAuth package with your custom model overrides
+const { oauthRouter, authenticateToken, sequelize, models, initializeDatabase } = createOauthPackage({
+  getUser: myCustomGetUser,
+  getUserFromClient: myCustomGetUserFromClient,
+});
+
 
 const app = express();
-// Use process.env.PORT, fallback to 3000 if not set
 const port = process.env.PORT || 3000;
 
 app.use(cors());
 app.use(bodyParser.json());
 app.use(bodyParser.urlencoded({ extended: true }));
 
-// Define the OAuth model object by referencing static methods from Sequelize models
-const oauthModel = {
-  getClient: db.Client.getClient,
-  saveToken: db.Token.saveToken,
-  getAccessToken: db.Token.getAccessToken,
-  getRefreshToken: db.Token.getRefreshToken,
-  revokeToken: db.Token.revokeToken,
-  saveAuthorizationCode: db.AuthorizationCode.saveAuthorizationCode,
-  getAuthorizationCode: db.AuthorizationCode.getAuthorizationCode,
-  revokeAuthorizationCode: db.AuthorizationCode.revokeAuthorizationCode,
-  getUser: async (username, password) => {
-    console.log(`OAuth Model (server.js): getUser called for username: ${username}`);
-    return null;
-  },
-  // In your server.js, within the oauthModel:
-  getUserFromClient: async (client) => {
-    if (client.clientName) {
-      return { id: client.clientName }; // Return a user object
-    }
-    return null; // No user associated with this client
-  },
-};
+// --- Mount the OAuth Server Routes ---
+const OAUTH_BASE_ROUTE = process.env.OAUTH_BASE_ROUTE || '/auth'; // Get base route from .env
+app.use(OAUTH_BASE_ROUTE, oauthRouter);
 
-// Initialize OAuth Server with the new model object
-const oauth = new OAuthServer({
-  model: oauthModel,
-  grants: ['authorization_code', 'refresh_token', 'client_credentials', 'password'],
-  accessTokenLifetime: process.env.OAUTH_ACCESS_TOKEN_LIFETIME || 3600,
-  refreshTokenLifetime: process.env.OAUTH_REFRESH_TOKEN_LIFETIME || 86400,
+// --- Main Application Routes ---
+app.get('/', (req, res) => {
+  res.send('Welcome to the Main Application!');
 });
 
-// Pass the oauth instance to the oauthRoutes module
-oauthRoutes.setOauthServerInstance(oauth);
-
-// --- Route Mounting ---
-app.use('/api/clients', clientRoutes);
-app.use('/oauth', oauthRoutes.router);
-
-// --- Frontend Serving ---
-app.get('/admin/clients', (req, res) => {
-  res.sendFile(path.join(__dirname, 'public', 'index.html'));
+// Example protected route using the imported authentication middleware
+app.get('/api/data', authenticateToken, (req, res) => {
+  res.json({
+    message: 'This is protected data!',
+    authenticatedUserOrClient: req.oauth.user ? req.oauth.user.id : (req.oauth.client ? req.oauth.client.clientId : 'unknown'),
+    tokenScope: req.oauth.scope,
+    // Access details from your custom user object if associated
+    userName: req.oauth.user ? req.oauth.user.name : undefined
+  });
 });
-app.use('/static', express.static(path.join(__dirname, 'public')));
 
-// --- Server Start ---
-db.sequelize.authenticate() // Optional: Check database connection
+// Unprotected route
+app.get('/api/public', (req, res) => {
+  res.send('This is public data.');
+});
+
+// --- Client Management UI ---
+// Remember: The UI is now served by the OAuth package itself, under /admin/clients
+// e.g., http://localhost:3000/auth/admin/clients
+app.get('/admin/clients-ui', (req, res) => {
+  // This is just a redirect or a simple link to the actual UI provided by the package
+  res.redirect(`${OAUTH_BASE_ROUTE}/admin/clients`);
+});
+
+
+// --- Database Initialization and Server Start ---
+initializeDatabase()
   .then(() => {
     app.listen(port, () => {
-      console.log(`OAuth Client Management API server listening at http://localhost:${port}`);
-      console.log(`Client Management UI: http://localhost:${port}/admin/clients`);
-      console.log(`OAuth Token Endpoint: http://localhost:${port}/oauth/token (POST)`);
-      console.log(`OAuth Authorization Endpoint: http://localhost:${port}/oauth/authorize (GET)`);
+      console.log(`Main application listening on port ${port}`);
+      console.log(`OAuth Server & Client Management UI mounted under ${OAUTH_BASE_ROUTE}`);
+      console.log(`Client Management UI available at http://localhost:${port}${OAUTH_BASE_ROUTE}/admin/clients`);
+      console.log(`Test protected route: http://localhost:${port}/api/data (requires Bearer token)`);
+      console.log(`OAuth Token Endpoint: http://localhost:${port}${OAUTH_BASE_ROUTE}/token`);
+      console.log(`OAuth Authorize Endpoint: http://localhost:${port}${OAUTH_BASE_ROUTE}/authorize`);
     });
   })
-  .catch((err) => {
-    console.error('Unable to connect to the database:', err);
+  .catch(err => {
+    console.error('Failed to start main application: Database connection error.', err);
     process.exit(1);
   });
